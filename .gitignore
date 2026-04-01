@@ -1,3 +1,9 @@
+# macOS / IDE
+.DS_Store
+.idea/
+.kotlin/
+*.iml
+
 # Generated Android / native build artifacts
 **/.cxx/
 **/build/
