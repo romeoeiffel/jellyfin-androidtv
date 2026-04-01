@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.auth.repository.AuthenticationRepository
 import org.jellyfin.androidtv.auth.repository.ServerRepository
@@ -44,6 +45,14 @@ fun SettingsAuthenticationAutoSignInScreen() {
 	}
 
 	val storedServers by serverRepository.storedServers.collectAsState()
+	
+	val storedUsers = remember(storedServers) {
+		storedServers.flatMap { server ->
+			serverUserRepository.getStoredServerUsers(server).map { user ->
+				Pair(server, user)
+			}
+		}
+	}
 
 	SettingsColumn {
 		item {
@@ -77,34 +86,36 @@ fun SettingsAuthenticationAutoSignInScreen() {
 			)
 		}
 
-		for (server in storedServers) {
-			item { ListSection(headingContent = { Text(server.name) }) }
-
-			val users = serverUserRepository.getStoredServerUsers(server)
+		items(items = storedUsers) { entry ->
+			val server = entry.first
+			val user = entry.second
 			val serverId = server.id.toString()
-			items(users) { user ->
-				val userId = user.id.toString()
+			val userId = user.id.toString()
 
-				ListButton(
-					leadingContent = {
-						ProfilePicture(
-							url = authenticationRepository.getUserImageUrl(server, user),
-							modifier = Modifier
-								.size(24.dp)
-								.clip(IconButtonDefaults.Shape)
-						)
-					},
-					headingContent = { Text(user.name) },
-					trailingContent = { RadioButton(checked = autoLoginUserBehavior == UserSelectBehavior.SPECIFIC_USER && autoLoginServerId == serverId && autoLoginUserId == userId) },
-					onClick = {
-						autoLoginUserBehavior = UserSelectBehavior.SPECIFIC_USER
-						autoLoginServerId = serverId
-						autoLoginUserId = userId
-
-						router.back()
-					}
-				)
-			}
+			ListButton(
+				leadingContent = {
+					ProfilePicture(
+						url = authenticationRepository.getUserImageUrl(server, user),
+						modifier = Modifier
+							.size(24.dp)
+							.clip(IconButtonDefaults.Shape)
+					)
+				},
+				headingContent = { Text(user.name) },
+				trailingContent = {
+					RadioButton(
+						checked = autoLoginUserBehavior == UserSelectBehavior.SPECIFIC_USER &&
+							autoLoginServerId == serverId &&
+							autoLoginUserId == userId
+					)
+				},
+				onClick = {
+					autoLoginUserBehavior = UserSelectBehavior.SPECIFIC_USER
+					autoLoginServerId = serverId
+					autoLoginUserId = userId
+					router.back()
+				}
+			)
 		}
 	}
 }

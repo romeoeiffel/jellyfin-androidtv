@@ -64,7 +64,7 @@ class ServerFragment : Fragment() {
 		val server = serverIdArgument?.let(startupViewModel::getServer)
 
 		if (server == null) {
-			navigateFragment<SelectServerFragment>(keepToolbar = true, keepHistory = false)
+			requireActivity().finish()
 			return null
 		}
 
@@ -107,7 +107,8 @@ class ServerFragment : Fragment() {
 
 				binding.users.isFocusable = users.any()
 				binding.noUsersWarning.isVisible = users.isEmpty()
-				binding.root.requestFocus()
+				if (users.isEmpty()) binding.addUserButton.requestFocus()
+				else binding.root.requestFocus()
 			}.launchIn(viewLifecycleOwner.lifecycleScope)
 
 		startupViewModel.loadUsers(server)
@@ -131,7 +132,8 @@ class ServerFragment : Fragment() {
 	}
 
 	private fun onServerChange(server: Server) {
-		binding.loginDisclaimer.text = server.loginDisclaimer?.let { markdownRenderer.toMarkdownSpanned(it) }
+		binding.loginDisclaimer.text = null
+		binding.loginDisclaimer.isGone = true
 
 		binding.serverButton.apply {
 			state = ServerButtonView.State.EDIT
@@ -139,6 +141,9 @@ class ServerFragment : Fragment() {
 			address = server.address
 			version = server.version
 		}
+		binding.serverButton.isGone = true
+		binding.serverButton.isFocusable = false
+		binding.serverButton.isClickable = false
 
 		binding.addUserButton.setOnClickListener {
 			navigateFragment<UserLoginFragment>(
@@ -147,10 +152,6 @@ class ServerFragment : Fragment() {
 					UserLoginFragment.ARG_USERNAME to null
 				)
 			)
-		}
-
-		binding.serverButton.setOnClickListener {
-			navigateFragment<SelectServerFragment>(keepToolbar = true)
 		}
 
 		if (!server.versionSupported) {
@@ -194,8 +195,11 @@ class ServerFragment : Fragment() {
 		backgroundService.clearBackgrounds()
 
 		val server = serverIdArgument?.let(startupViewModel::getServer)
-		if (server != null) startupViewModel.loadUsers(server)
-		else navigateFragment<SelectServerFragment>(keepToolbar = true)
+		if (server != null) {
+			startupViewModel.loadUsers(server)
+		} else {
+			requireActivity().finish()
+		}
 	}
 
 	private class UserAdapter(

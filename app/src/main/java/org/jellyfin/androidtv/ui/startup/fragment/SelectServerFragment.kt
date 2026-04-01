@@ -51,6 +51,12 @@ import org.koin.androidx.viewmodel.ext.android.activityViewModel
 import org.koin.compose.koinInject
 
 class SelectServerFragment : Fragment() {
+
+	companion object {
+		private const val FIXED_SERVER_URL = "https://madflix.coinfactory.fr"
+	}
+	private var autoServerRedirectDone = false
+
 	private var _binding: FragmentSelectServerBinding? = null
 	private val binding get() = _binding!!
 	private val startupViewModel: StartupViewModel by activityViewModel()
@@ -58,6 +64,7 @@ class SelectServerFragment : Fragment() {
 	@Suppress("LongMethod")
 	override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
 		_binding = FragmentSelectServerBinding.inflate(inflater, container, false)
+		binding.root.isVisible = false
 
 		// Create spacing for recycler view of 8dp
 		@Suppress("MagicNumber")
@@ -137,6 +144,49 @@ class SelectServerFragment : Fragment() {
 				startupViewModel.storedServers.onEach { servers ->
 					storedServerAdapter.items = servers.map { StatefulServer(server = it) }
 
+					if (servers.isEmpty() && !autoServerRedirectDone) {
+						autoServerRedirectDone = true
+
+						startupViewModel.addServer(FIXED_SERVER_URL).onEach { state ->
+							when (state) {
+								is ConnectedState -> {
+									parentFragmentManager.commit {
+										replace<StartupToolbarFragment>(R.id.content_view)
+										add<ServerFragment>(
+											R.id.content_view,
+											null,
+											bundleOf(
+												ServerFragment.ARG_SERVER_ID to state.id.toString()
+											)
+										)
+									}
+								}
+
+								is UnableToConnectState -> {
+									autoServerRedirectDone = false
+									binding.root.isVisible = true
+
+									Toast.makeText(
+										requireContext(),
+										getString(
+											R.string.server_connection_failed_candidates,
+											state.addressCandidates
+												.map { "${it.key} ${it.value.getSummary(requireContext())}" }
+												.joinToString(prefix = "\n", separator = "\n")
+										),
+										Toast.LENGTH_LONG
+									).show()
+								}
+
+								else -> Unit
+							}
+						}.launchIn(lifecycleScope)
+
+						return@onEach
+					}
+
+					binding.root.isVisible = true
+					
 					binding.storedServersTitle.isVisible = servers.isNotEmpty()
 					binding.storedServers.isVisible = servers.isNotEmpty()
 					binding.storedServers.isFocusable = servers.isNotEmpty()

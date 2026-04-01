@@ -434,7 +434,7 @@
     <string name="pref_libraries">Libraries</string>
     <string name="pref_libraries_description">Change how libraries are displayed</string>
     <string name="pref_login">Login</string>
-    <string name="pref_login_description">Servers, accounts, automatic sign in</string>
+    <string name="pref_login_description">Users, automatic sign in</string>
     <string name="pref_customization_description">Theme, home, remapping</string>
     <string name="pref_playback_description">Video, subtitles, live tv, next up</string>
     <string name="pref_video">Video</string>

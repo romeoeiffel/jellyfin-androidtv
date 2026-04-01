@@ -36,6 +36,7 @@ fun SettingsAuthenticationScreen(launchedFromLogin: Boolean = false) {
 	LaunchedEffect(serverRepository) { serverRepository.loadStoredServers() }
 
 	val storedServers by serverRepository.storedServers.collectAsState()
+	val firstStoredServer = remember(storedServers) { storedServers.firstOrNull() }
 
 	SettingsColumn {
 		if (launchedFromLogin) item {
@@ -84,26 +85,22 @@ fun SettingsAuthenticationScreen(launchedFromLogin: Boolean = false) {
 			)
 		}
 
-		if (storedServers.isNotEmpty()) {
-			item { ListSection(headingContent = { Text(stringResource(R.string.lbl_manage_servers)) }) }
-
-			items(storedServers) { server ->
+		if (firstStoredServer != null) {
+			item {
 				ListButton(
-					leadingContent = { Icon(painterResource(R.drawable.ic_house), contentDescription = null) },
-					headingContent = { Text(server.name) },
-					captionContent = { Text(server.address) },
+					headingContent = { Text(stringResource(R.string.pref_accounts)) },
 					onClick = {
 						router.push(
 							route = Routes.AUTHENTICATION_SERVER,
 							parameters = mapOf(
-								"serverId" to server.id.toString(),
+								"serverId" to firstStoredServer.id.toString(),
 							),
 						)
 					}
 				)
 			}
 		}
-
+		
 		// Disallow changing the "always authenticate" option from the login screen
 		// because that could allow a kid to disable the function to access a parent's account
 		if (!launchedFromLogin) {

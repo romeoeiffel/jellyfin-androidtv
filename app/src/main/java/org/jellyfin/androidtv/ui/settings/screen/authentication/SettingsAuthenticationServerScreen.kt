@@ -57,13 +57,11 @@ fun SettingsAuthenticationServerScreen(serverId: UUID) {
 		item {
 			ListSection(
 				overlineContent = { Text(stringResource(R.string.pref_login).uppercase()) },
-				headingContent = { Text(server?.name.orEmpty()) },
-				captionContent = { Text(server?.address.orEmpty()) },
+				headingContent = { Text(stringResource(R.string.pref_accounts)) },
 			)
 		}
 
 		if (!users.isNullOrEmpty()) {
-			item { ListSection(headingContent = { Text(stringResource(R.string.pref_accounts)) }) }
 
 			items(users) { user ->
 				ListButton(
@@ -102,20 +100,5 @@ fun SettingsAuthenticationServerScreen(serverId: UUID) {
 			}
 		}
 
-		item { ListSection(headingContent = { Text(stringResource(R.string.lbl_server)) }) }
-
-		item {
-			ListButton(
-				leadingContent = { Icon(painterResource(R.drawable.ic_delete), contentDescription = null) },
-				headingContent = { Text(stringResource(R.string.lbl_remove_server)) },
-				captionContent = { Text(stringResource(R.string.lbl_remove_users)) },
-				onClick = {
-					lifecycleScope.launch {
-						serverRepository.deleteServer(server?.id ?: serverId)
-						router.back()
-					}
-				}
-			)
-		}
 	}
 }

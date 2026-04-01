@@ -43,7 +43,7 @@ fun SettingsAuthenticationServerUserScreen(serverId: UUID, userId: UUID) {
 	SettingsColumn {
 		item {
 			ListSection(
-				overlineContent = { Text(server?.name?.uppercase().orEmpty()) },
+				overlineContent = { Text(stringResource(R.string.pref_accounts).uppercase()) },
 				headingContent = { Text(user?.name.orEmpty()) },
 			)
 		}
