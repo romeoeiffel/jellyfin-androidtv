@@ -11,7 +11,7 @@ android {
         minSdk = 21
 
 		ndk {
-			abiFilters += setOf("armeabi-v7a")
+			abiFilters += setOf("armeabi-v7a", "arm64-v8a")
 		}
         externalNativeBuild {
             cmake {
