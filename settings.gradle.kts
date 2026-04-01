@@ -8,6 +8,7 @@ include(":app")
 // Modules
 include(":design")
 include(":playback:core")
+include(":flycast_embedded")
 include(":playback:jellyfin")
 include(":playback:media3:exoplayer")
 include(":playback:media3:session")
@@ -38,5 +39,6 @@ dependencyResolutionManagement {
 				includeVersionByRegex("org.jellyfin.sdk", ".*", "openapi-unstable-SNAPSHOT")
 			}
 		}
+		maven("https://jitpack.io")
 	}
 }

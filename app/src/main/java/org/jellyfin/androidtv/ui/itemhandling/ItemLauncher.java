@@ -9,6 +9,7 @@ import org.jellyfin.androidtv.constant.QueryType;
 import org.jellyfin.androidtv.data.model.ChapterItemInfo;
 import org.jellyfin.androidtv.preference.LibraryPreferences;
 import org.jellyfin.androidtv.preference.PreferencesRepository;
+import org.jellyfin.androidtv.ui.gaming.NativeGameLauncher;
 import org.jellyfin.androidtv.ui.navigation.Destination;
 import org.jellyfin.androidtv.ui.navigation.Destinations;
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository;
@@ -19,11 +20,14 @@ import org.jellyfin.androidtv.util.PlaybackHelper;
 import org.jellyfin.androidtv.util.Utils;
 import org.jellyfin.androidtv.util.apiclient.Response;
 import org.jellyfin.androidtv.util.sdk.compat.JavaCompat;
+import org.jellyfin.androidtv.ui.gaming.NativeGameDetector;
+import org.jellyfin.androidtv.ui.gaming.NativeGameSpec;
 import org.jellyfin.sdk.model.api.BaseItemDto;
 import org.jellyfin.sdk.model.api.BaseItemKind;
 import org.jellyfin.sdk.model.api.CollectionType;
 import org.koin.java.KoinJavaComponent;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -33,7 +37,7 @@ import timber.log.Timber;
 
 public class ItemLauncher {
     private final Lazy<NavigationRepository> navigationRepository = KoinJavaComponent.<NavigationRepository>inject(NavigationRepository.class);
-    private final Lazy<PreferencesRepository> preferencesRepository = KoinJavaComponent.<PreferencesRepository>inject(org.jellyfin.androidtv.preference.PreferencesRepository .class);
+    private final Lazy<PreferencesRepository> preferencesRepository = KoinJavaComponent.<PreferencesRepository>inject(org.jellyfin.androidtv.preference.PreferencesRepository.class);
     private final Lazy<MediaManager> mediaManager = KoinJavaComponent.<MediaManager>inject(MediaManager.class);
     private final Lazy<PlaybackLauncher> playbackLauncher = KoinJavaComponent.<PlaybackLauncher>inject(PlaybackLauncher.class);
     private final Lazy<PlaybackHelper> playbackHelper = KoinJavaComponent.<PlaybackHelper>inject(PlaybackHelper.class);
@@ -73,10 +77,10 @@ public class ItemLauncher {
                 try {
                     Timber.i("Item selected: %s (%s)", baseItem.getName(), baseItem.getType().toString());
                 } catch (Exception e) {
-                    //swallow it
+                    // swallow
                 }
 
-                //specialized type handling
+                // specialized type handling
                 switch (baseItem.getType()) {
                     case USER_VIEW:
                     case COLLECTION_FOLDER:
@@ -96,13 +100,12 @@ public class ItemLauncher {
                         if (rowItem.getBaseItem() == null)
                             return;
 
-                        // if the song currently playing is selected (and is the exact item - this only happens in the nowPlayingRow), open AudioNowPlayingActivity
                         if (mediaManager.getValue().hasAudioQueueItems() && rowItem instanceof AudioQueueBaseRowItem && rowItem.getBaseItem().getId().equals(mediaManager.getValue().getCurrentAudioItem().getId())) {
                             navigationRepository.getValue().navigate(Destinations.INSTANCE.getNowPlaying());
                         } else if (mediaManager.getValue().hasAudioQueueItems() && rowItem instanceof AudioQueueBaseRowItem && adapter.indexOf(rowItem) < mediaManager.getValue().getCurrentAudioQueueSize()) {
                             Timber.d("playing audio queue item");
                             mediaManager.getValue().playFrom(((AudioQueueBaseRowItem) rowItem).getQueueEntry());
-                        } else if (adapter instanceof ItemRowAdapter && ((ItemRowAdapter)adapter).getQueryType() == QueryType.Search) {
+                        } else if (adapter instanceof ItemRowAdapter && ((ItemRowAdapter) adapter).getQueryType() == QueryType.Search) {
                             playbackLauncher.getValue().launch(context, Arrays.asList(rowItem.getBaseItem()));
                         } else {
                             Timber.d("playing audio item");
@@ -135,14 +138,10 @@ public class ItemLauncher {
                             ));
                         }
                         return;
-
                 }
 
-                // or generic handling
+                // generic handling
                 if (Utils.isTrue(baseItem.isFolder())) {
-                    // Some items don't have a display preferences id, but it's required for StdGridFragment
-                    // Use the id of the item as a workaround, it's a unique key for the specific item
-                    // Which is exactly what we want
                     if (baseItem.getDisplayPreferencesId() == null) {
                         baseItem = JavaCompat.copyWithDisplayPreferencesId(baseItem, baseItem.getId().toString());
                     }
@@ -154,12 +153,30 @@ public class ItemLauncher {
                         case ShowDetails:
                             navigationRepository.getValue().navigate(Destinations.INSTANCE.itemDetails(baseItem.getId()));
                             break;
+
                         case Play:
-                            //Just play it directly
+			    Timber.i("MADFLIX_NATIVE item name=%s type=%s path=%s", baseItem.getName(), baseItem.getType(), baseItem.getPath());
+			    Timber.i("MADFLIX_NATIVE selectAction=%s", rowItem.getSelectAction());
+                            
+			    NativeGameSpec gameSpec = NativeGameDetector.fromItem(baseItem);
+			    Timber.i("MADFLIX_NATIVE gameSpec=%s", gameSpec == null ? "null" : (gameSpec.getRom() + " / " + gameSpec.getSystem()));
+
+				if (gameSpec != null) {
+   				 Timber.i("Launching native game: rom=%s system=%s", gameSpec.getRom(), gameSpec.getSystem());
+    				 NativeGameLauncher.launch(
+    					context,
+    					gameSpec.getRom(),
+    					gameSpec.getSystem(),
+    					baseItem.getName(),
+    					null,
+    					gameSpec.getRomCandidates().toArray(new String[0])
+				);
+    			 	break;
+				}
+
                             playbackHelper.getValue().getItemsToPlay(context, baseItem, baseItem.getType() == BaseItemKind.MOVIE, false, new Response<List<BaseItemDto>>() {
                                 @Override
                                 public void onResponse(List<BaseItemDto> response) {
-                                    if (!isActive()) return;
                                     playbackLauncher.getValue().launch(context, response);
                                 }
                             });
@@ -167,24 +184,22 @@ public class ItemLauncher {
                     }
                 }
                 break;
+
             case Person:
                 navigationRepository.getValue().navigate(Destinations.INSTANCE.itemDetails(rowItem.getItemId()));
-
                 break;
+
             case Chapter:
                 final ChapterItemInfo chapter = ((ChapterItemInfoBaseRowItem) rowItem).getChapterInfo();
-                //Start playback of the item at the chapter point
                 ItemLauncherHelper.getItem(rowItem.getItemId(), new Response<BaseItemDto>() {
                     @Override
                     public void onResponse(BaseItemDto response) {
-                        if (!isActive()) return;
                         List<BaseItemDto> items = new ArrayList<>(1);
                         items.add(response);
                         Long start = chapter.getStartPositionTicks() / 10000;
                         playbackLauncher.getValue().launch(context, items, start.intValue());
                     }
                 });
-
                 break;
 
             case LiveTvProgram:
@@ -195,31 +210,25 @@ public class ItemLauncher {
                         navigationRepository.getValue().navigate(Destinations.INSTANCE.channelDetails(program.getId(), program.getChannelId(), program));
                         break;
                     case Play:
-                        //Just play it directly - need to retrieve program channel via items api to convert to BaseItem
                         ItemLauncherHelper.getItem(program.getChannelId(), new Response<BaseItemDto>() {
                             @Override
                             public void onResponse(BaseItemDto response) {
-                                if (!isActive()) return;
                                 List<BaseItemDto> items = new ArrayList<>(1);
                                 items.add(response);
                                 playbackLauncher.getValue().launch(context, items);
-
                             }
                         });
                 }
                 break;
 
             case LiveTvChannel:
-                //Just tune to it by playing
                 final BaseItemDto channel = rowItem.getBaseItem();
                 ItemLauncherHelper.getItem(channel.getId(), new Response<BaseItemDto>() {
                     @Override
                     public void onResponse(BaseItemDto response) {
-                        if (!isActive()) return;
                         playbackHelper.getValue().getItemsToPlay(context, response, false, false, new Response<List<BaseItemDto>>() {
                             @Override
                             public void onResponse(List<BaseItemDto> response) {
-                                if (!isActive()) return;
                                 playbackLauncher.getValue().launch(context, response);
                             }
                         });
@@ -234,11 +243,9 @@ public class ItemLauncher {
                         navigationRepository.getValue().navigate(Destinations.INSTANCE.itemDetails(rowItem.getBaseItem().getId()));
                         break;
                     case Play:
-                        //Just play it directly but need to retrieve as base item
                         ItemLauncherHelper.getItem(rowItem.getBaseItem().getId(), new Response<BaseItemDto>() {
                             @Override
                             public void onResponse(BaseItemDto response) {
-                                if (!isActive()) return;
                                 List<BaseItemDto> items = new ArrayList<>(1);
                                 items.add(response);
                                 playbackLauncher.getValue().launch(context, items);
@@ -251,7 +258,6 @@ public class ItemLauncher {
             case SeriesTimer:
                 navigationRepository.getValue().navigate(Destinations.INSTANCE.seriesTimerDetails(rowItem.getItemId(), ((SeriesTimerInfoDtoBaseRowItem) rowItem).getSeriesTimerInfo()));
                 break;
-
 
             case GridButton:
                 switch (((GridButtonBaseRowItem) rowItem).getGridButton().getId()) {
@@ -274,4 +280,5 @@ public class ItemLauncher {
                 break;
         }
     }
+
 }

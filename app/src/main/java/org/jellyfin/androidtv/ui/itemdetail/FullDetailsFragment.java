@@ -91,7 +91,11 @@ import org.jellyfin.sdk.model.api.SeriesTimerInfoDto;
 import org.jellyfin.sdk.model.api.UserDto;
 import org.jellyfin.sdk.model.serializer.UUIDSerializerKt;
 import org.koin.java.KoinJavaComponent;
+import org.jellyfin.androidtv.ui.gaming.NativeGameLauncher;
+import org.jellyfin.androidtv.ui.gaming.NativeGameDetector;
+import org.jellyfin.androidtv.ui.gaming.NativeGameSpec;
 
+import java.io.File;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -1217,21 +1221,36 @@ public class FullDetailsFragment extends Fragment implements RecordingIndicatorV
         play(mBaseItem, 0, true);
     }
 
+    
     void play(final BaseItemDto item, final int pos, final boolean shuffle) {
-        playbackHelper.getValue().getItemsToPlay(getContext(), item, pos == 0 && item.getType() == BaseItemKind.MOVIE, shuffle, new Response<List<BaseItemDto>>(getLifecycle()) {
-            @Override
-            public void onResponse(List<BaseItemDto> response) {
-                if (!isActive()) return;
-                if (response.isEmpty()) {
-                    Timber.e("No items to play - ignoring play request.");
-                    return;
-                }
-
-                interactionTracker.getValue().notifyStartSession(item, response);
-                KoinJavaComponent.<PlaybackLauncher>get(PlaybackLauncher.class).launch(getContext(), response, pos, false, 0, shuffle);
-            }
-        });
+       NativeGameSpec gameSpec = NativeGameDetector.fromItem(item);
+       if (gameSpec != null) {
+         Timber.i("MADFLIX_NATIVE_DETAILS rom=%s system=%s path=%s", gameSpec.getRom(), gameSpec.getSystem(), item.getPath());
+         NativeGameLauncher.launch(
+    		requireContext(),
+    		gameSpec.getRom(),
+    		gameSpec.getSystem(),
+   		item.getName(),
+    		null,
+    		gameSpec.getRomCandidates().toArray(new String[0])
+       );
+       return;
     }
+
+    playbackHelper.getValue().getItemsToPlay(getContext(), item, pos == 0 && item.getType() == BaseItemKind.MOVIE, shuffle, new Response<List<BaseItemDto>>(getLifecycle()) {
+        @Override
+        public void onResponse(List<BaseItemDto> response) {
+            if (!isActive()) return;
+            if (response.isEmpty()) {
+                Timber.e("No items to play - ignoring play request.");
+                return;
+            }
+
+            interactionTracker.getValue().notifyStartSession(item, response);
+            KoinJavaComponent.<PlaybackLauncher>get(PlaybackLauncher.class).launch(getContext(), response, pos, false, 0, shuffle);
+        }
+    });
+}
 
     void play(final List<BaseItemDto> items, final int pos, final boolean shuffle) {
         if (items.isEmpty()) return;

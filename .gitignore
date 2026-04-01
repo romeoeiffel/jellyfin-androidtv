@@ -1,9 +1,5 @@
-*.iml
-.DS_Store
+# Generated Android / native build artifacts
+**/.cxx/
+**/build/
+.gradle/
 local.properties
-
-/.idea
-.gradle
-.kotlin/
-build/
-captures/
