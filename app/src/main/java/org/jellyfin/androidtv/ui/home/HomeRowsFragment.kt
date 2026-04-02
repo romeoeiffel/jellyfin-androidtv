@@ -25,6 +25,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.Job
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.CustomMessage
 import org.jellyfin.androidtv.constant.HomeSectionType
@@ -78,6 +79,8 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener {
 	private var currentItem: BaseRowItem? = null
 	private var currentRow: ListRow? = null
 	private var justLoaded = true
+	private var backgroundUpdateJob: Job? = null
+	private var lastScheduledBackgroundItemId: String? = null
 	var onSelectedRowPositionChanged: ((Int) -> Unit)? = null
 	var onMoveUpFromFirstRow: (() -> Unit)? = null
 
@@ -259,6 +262,24 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener {
 		}
 	}
 
+	private fun scheduleBackgroundUpdate(item: BaseRowItem) {
+		val targetId = item.baseItem?.id?.toString()
+
+		if (targetId != null && targetId == lastScheduledBackgroundItemId) return
+
+		backgroundUpdateJob?.cancel()
+		lastScheduledBackgroundItemId = targetId
+
+		backgroundUpdateJob = lifecycleScope.launch {
+			delay(140)
+
+			if (!isAdded) return@launch
+			if (currentItem?.baseItem?.id?.toString() != targetId) return@launch
+
+			backgroundService.setBackground(item.baseItem)
+		}
+	}
+
 	private fun refreshCurrentItem() {
 		val adapter = currentRow?.adapter as? ItemRowAdapter ?: return
 		val item = currentItem ?: return
@@ -268,6 +289,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener {
 	}
 
 	override fun onDestroy() {
+		backgroundUpdateJob?.cancel()
 		super.onDestroy()
 		mediaManager.removeAudioEventListener(this)
 	}
@@ -294,6 +316,8 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener {
 			row: Row?,
 		) {
 			if (item !is BaseRowItem || row !is ListRow) {
+				backgroundUpdateJob?.cancel()
+				lastScheduledBackgroundItemId = null
 				currentItem = null
 				currentRow = null
 				backgroundService.clearBackgrounds()
@@ -309,7 +333,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener {
 			val itemRowAdapter = row.adapter as? ItemRowAdapter
 			itemRowAdapter?.loadMoreItemsIfNeeded(itemRowAdapter.indexOf(item))
 
-			backgroundService.setBackground(item.baseItem)
+			scheduleBackgroundUpdate(item)
 		}
 	}
 }

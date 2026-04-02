@@ -22,7 +22,7 @@ class HomeFragmentViewsRow(
 		val presenter = if (small) smallCardPresenter else largeCardPresenter
 		val rowAdapter = ItemRowAdapter(context, GetUserViewsRequest, presenter, rowsAdapter)
 
-		val header = HeaderItem(context.getString(R.string.lbl_my_media))
+		val header = if (rowsAdapter.size() == 0) null else HeaderItem(context.getString(R.string.lbl_my_media))
 		val row = ListRow(header, rowAdapter)
 		rowAdapter.setRow(row)
 		rowAdapter.Retrieve()

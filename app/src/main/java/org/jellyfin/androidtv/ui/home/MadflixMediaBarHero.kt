@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,13 +32,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import coil3.compose.rememberAsyncImagePainter
 import kotlinx.coroutines.delay
 import org.jellyfin.androidtv.R
@@ -90,6 +96,12 @@ fun MadflixMediaBarHero(
 	val imageUrl = remember(item, api.baseUrl) { buildHeroImageUrl(api.baseUrl, item) }
 	val logoUrl = remember(item, api.baseUrl) { buildHeroLogoUrl(api.baseUrl, item) }
 
+	val primaryButtonContainer = Color.White
+	val primaryButtonContent = Color.Black
+	val iconCircleContainer = Color.Black.copy(alpha = 0.45f)
+	val iconCircleBorder = Color.White.copy(alpha = 0.22f)
+	val chevronContent = Color.White.copy(alpha = 0.96f)
+
 	Box(
 		modifier = modifier
 			.fillMaxWidth()
@@ -109,9 +121,10 @@ fun MadflixMediaBarHero(
 				.background(
 					Brush.horizontalGradient(
 						colors = listOf(
-							Color.Black.copy(alpha = 0.92f),
-							Color.Black.copy(alpha = 0.70f),
-							Color.Black.copy(alpha = 0.18f),
+							Color.Black.copy(alpha = 0.95f),
+							Color.Black.copy(alpha = 0.82f),
+							Color.Black.copy(alpha = 0.48f),
+							Color.Black.copy(alpha = 0.14f),
 							Color.Transparent
 						)
 					)
@@ -126,8 +139,26 @@ fun MadflixMediaBarHero(
 						colors = listOf(
 							Color.Transparent,
 							Color.Transparent,
+							Color.Black.copy(alpha = 0.10f),
+							Color.Black.copy(alpha = 0.30f),
+							Color.Black.copy(alpha = 0.68f)
+						)
+					)
+				)
+		)
+
+		Box(
+			modifier = Modifier
+				.align(Alignment.BottomCenter)
+				.fillMaxWidth()
+				.height(220.dp)
+				.background(
+					Brush.verticalGradient(
+						colors = listOf(
+							Color.Transparent,
 							Color.Black.copy(alpha = 0.18f),
-							Color.Black.copy(alpha = 0.70f)
+							Color.Black.copy(alpha = 0.42f),
+							Color.Black.copy(alpha = 0.88f)
 						)
 					)
 				)
@@ -136,16 +167,16 @@ fun MadflixMediaBarHero(
 		Column(
 			modifier = Modifier
 				.align(Alignment.BottomStart)
-				.padding(start = 72.dp, end = 72.dp, bottom = 140.dp)
-				.widthIn(max = 760.dp),
-			verticalArrangement = Arrangement.spacedBy(12.dp)
+				.padding(start = 72.dp, end = 72.dp, bottom = 124.dp)
+				.widthIn(max = 820.dp),
+			verticalArrangement = Arrangement.spacedBy(14.dp)
 		) {
 			if (logoUrl != null) {
 				Image(
 					painter = rememberAsyncImagePainter(model = logoUrl),
 					contentDescription = item.name,
 					contentScale = ContentScale.Fit,
-					modifier = Modifier.sizeIn(maxWidth = 420.dp, maxHeight = 120.dp)
+					modifier = Modifier.sizeIn(maxWidth = 460.dp, maxHeight = 126.dp)
 				)
 			} else {
 				Text(
@@ -170,27 +201,45 @@ fun MadflixMediaBarHero(
 				Text(
 					text = subtitle,
 					style = JellyfinTheme.typography.default,
-					color = Color.White.copy(alpha = 0.80f),
+					color = Color.White.copy(alpha = 0.86f),
 				)
 			}
 
 			if (!item.overview.isNullOrBlank()) {
 				Text(
 					text = item.overview!!,
-					style = JellyfinTheme.typography.default,
-					maxLines = 3,
+					modifier = Modifier.widthIn(max = 600.dp),
+					style = JellyfinTheme.typography.default.copy(
+						fontFamily = FontFamily.SansSerif,
+						fontWeight = FontWeight.Medium,
+						fontSize = 12.sp,
+						lineHeight = 18.sp,
+						letterSpacing = (-0.1).sp,
+					),
+					maxLines = 4,
 					overflow = TextOverflow.Ellipsis,
-					color = Color.White.copy(alpha = 0.92f),
+					color = Color.White.copy(alpha = 0.82f),
 				)
 			}
 
+			val iconButtonModifier = Modifier
+				.handleMoveDownToRows(onMoveDownToRows)
+				.widthIn(min = 40.dp)
+				.sizeIn(minHeight = 40.dp)
+
+			val chevronButtonModifier = Modifier
+				.handleMoveDownToRows(onMoveDownToRows)
+				.widthIn(min = 18.dp)
+				.sizeIn(minHeight = 35.dp)
+
 			Row(
-				horizontalArrangement = Arrangement.spacedBy(12.dp),
+				horizontalArrangement = Arrangement.spacedBy(2.dp),
 				verticalAlignment = Alignment.CenterVertically,
 			) {
 				Button(
 					modifier = Modifier
 						.handleMoveDownToRows(onMoveDownToRows)
+						.sizeIn(minHeight = 40.dp)
 						.focusRequester(focusRequester)
 						.onFocusChanged { state ->
 							if (state.hasFocus || state.isFocused) {
@@ -206,41 +255,72 @@ fun MadflixMediaBarHero(
 						)
 					},
 					colors = ButtonDefaults.colors(
-						containerColor = JellyfinTheme.colorScheme.buttonActive,
-						contentColor = JellyfinTheme.colorScheme.onButtonActive,
+						containerColor = primaryButtonContainer,
+						contentColor = primaryButtonContent,
 					)
 				) {
-					Text(text = context.getString(R.string.lbl_play))
+					Text(text = "▶ ${context.getString(R.string.lbl_play)}",
+						fontSize = 12.sp
+					)
 				}
 
 				Button(
-					modifier = Modifier.handleMoveDownToRows(onMoveDownToRows),
+					modifier = iconButtonModifier,
 					onClick = {
 						navigationRepository.navigate(Destinations.itemDetails(item.id))
-					}
+					},
+					colors = ButtonDefaults.colors(
+						containerColor = Color.Transparent,
+						contentColor = Color.White,
+					)
 				) {
-					Text(text = "Info")
+					Box(
+						modifier = Modifier
+							.size(35.dp)
+							.background(iconCircleContainer, CircleShape)
+							.border(1.dp, iconCircleBorder, CircleShape),
+						contentAlignment = Alignment.Center
+					) {
+						Text(
+							text = "ⓘ",
+							fontSize = 24.sp
+						)
+					}
 				}
 
 				if (state.items.size > 1) {
 					Button(
-						modifier = Modifier.handleMoveDownToRows(onMoveDownToRows),
+						modifier = chevronButtonModifier,
 						onClick = {
 							selectedIndex =
 								if (selectedIndex == 0) state.items.lastIndex else selectedIndex - 1
-						}
+						},
+						colors = ButtonDefaults.colors(
+							containerColor = Color.Transparent,
+							contentColor = chevronContent,
+						)
 					) {
-						Text("◀")
+						Text(
+							text = "‹",
+							fontSize = 34.sp
+						)
 					}
 
 					Button(
-						modifier = Modifier.handleMoveDownToRows(onMoveDownToRows),
+						modifier = chevronButtonModifier,
 						onClick = {
 							selectedIndex =
 								if (selectedIndex == state.items.lastIndex) 0 else selectedIndex + 1
-						}
+						},
+						colors = ButtonDefaults.colors(
+							containerColor = Color.Transparent,
+							contentColor = chevronContent,
+						)
 					) {
-						Text("▶")
+						Text(
+							text = "›",
+							fontSize = 34.sp
+						)
 					}
 				}
 			}
@@ -284,10 +364,10 @@ private fun buildHeroImageUrl(baseUrl: String?, item: BaseItemDto): String? {
 
 	return when {
 		!item.backdropImageTags.isNullOrEmpty() ->
-			"$base/Items/$id/Images/Backdrop/0?maxHeight=720&quality=90"
+			"$base/Items/$id/Images/Backdrop/0?maxHeight=720&quality=85"
 
 		!item.imageTags.isNullOrEmpty() ->
-			"$base/Items/$id/Images/Primary?maxHeight=720&quality=90"
+			"$base/Items/$id/Images/Primary?maxHeight=720&quality=85"
 
 		else -> null
 	}
@@ -300,5 +380,5 @@ private fun buildHeroLogoUrl(baseUrl: String?, item: BaseItemDto): String? {
 	val hasLogo = item.imageTags?.keys?.any { it.name == "LOGO" } == true
 	if (!hasLogo) return null
 
-	return "$base/Items/$id/Images/Logo?maxWidth=600&quality=90"
+	return "$base/Items/$id/Images/Logo?maxWidth=520&quality=85"
 }

@@ -19,13 +19,13 @@ object NativeCoreMapper {
             "PLAYSTATION", "PLAYSTATION1", "PS1", "PSX" ->
                 "pcsx_rearmed_libretro_android.so"
 
-	    "SATURN", "SEGA_SATURN", "SEGASATURN" ->
-                "mednafen_saturn_libretro_android.so"
+			"SATURN", "SEGA_SATURN", "SEGASATURN" ->
+                "yabasanshiro_libretro_android.so"
 
             "NINTENDO64", "NINTENDO_64", "N64" ->
                 "mupen64plus_next_gles3_libretro_android.so"
 
-	    "NINTENDODS", "NINTENDO_DS", "DS" ->
+	    	"NINTENDODS", "NINTENDO_DS", "DS" ->
                 "melonds_libretro_android.so"
 
             else ->

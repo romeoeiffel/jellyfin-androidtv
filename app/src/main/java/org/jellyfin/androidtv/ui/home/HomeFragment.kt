@@ -8,6 +8,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -68,9 +70,13 @@ class HomeFragment : Fragment() {
 		val heroOffset by animateDpAsState(
 			targetValue = when {
 				heroHasFocus -> 0.dp
-				selectedRowPosition == 0 -> (-180).dp
-				else -> (-560).dp
+				selectedRowPosition == 0 -> (-150).dp
+				else -> (-520).dp
 			},
+			animationSpec = tween(
+				durationMillis = 280,
+				easing = FastOutSlowInEasing
+			),
 			label = "heroOffset"
 		)
 
@@ -78,10 +84,14 @@ class HomeFragment : Fragment() {
 
 		val rowsOffset by animateDpAsState(
 			targetValue = when {
-				heroHasFocus -> 420.dp
-				selectedRowPosition == 0 -> 260.dp
+				heroHasFocus -> 440.dp
+				selectedRowPosition == 0 -> 300.dp
 				else -> 0.dp
 			},
+			animationSpec = tween(
+				durationMillis = 280,
+				easing = FastOutSlowInEasing
+			),
 			label = "rowsOffset"
 		)
 
@@ -89,13 +99,14 @@ class HomeFragment : Fragment() {
 			mediaBarState = mediaBarController.load()
 		}
 
-		LaunchedEffect(mediaBarState.items, rowsSupportFragment) {
+		LaunchedEffect(mediaBarState.items, rowsSupportFragment, initialHeroFocusDone) {
 			if (
 				!initialHeroFocusDone &&
 				mediaBarState.items.isNotEmpty() &&
 				rowsSupportFragment != null
 			) {
-				delay(250)
+				delay(120)
+
 				rowsSupportFragment?.selectedPosition = 0
 				rowsSupportFragment?.verticalGridView?.post {
 					rowsSupportFragment?.verticalGridView?.clearFocus()
