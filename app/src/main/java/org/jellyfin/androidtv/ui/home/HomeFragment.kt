@@ -4,77 +4,173 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.layout.Column
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.fragment.app.Fragment
 import androidx.fragment.compose.AndroidFragment
 import androidx.fragment.compose.content
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import org.jellyfin.androidtv.auth.repository.ServerRepository
 import org.jellyfin.androidtv.auth.repository.SessionRepository
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
+import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbar
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbarActiveButton
+import org.jellyfin.sdk.api.client.ApiClient
 import org.koin.android.ext.android.inject
+import androidx.compose.ui.focus.FocusRequester
 
 class HomeFragment : Fragment() {
 	private val sessionRepository by inject<SessionRepository>()
 	private val serverRepository by inject<ServerRepository>()
 	private val notificationRepository by inject<NotificationsRepository>()
+	private val api by inject<ApiClient>()
+	private val userViewsRepository by inject<UserViewsRepository>()
 
 	override fun onCreateView(
 		inflater: LayoutInflater,
 		container: ViewGroup?,
 		savedInstanceState: Bundle?
 	) = content {
-		val rowsFocusRequester = remember { FocusRequester() }
-		LaunchedEffect(rowsFocusRequester) { rowsFocusRequester.requestFocus() }
+		val mediaBarFocusRequester = remember { FocusRequester() }
+		var rowsSupportFragment by remember { mutableStateOf<HomeRowsFragment?>(null) }
+
+		val mediaBarController = remember { MadflixMediaBarController(api, userViewsRepository) }
+		var mediaBarState by remember { mutableStateOf(MadflixMediaBarState()) }
+
+		var selectedRowPosition by remember { mutableIntStateOf(0) }
+		var initialHeroFocusDone by remember { mutableStateOf(false) }
+		var heroHasFocus by remember { mutableStateOf(true) }
+
+		val heroOffset by animateDpAsState(
+			targetValue = when {
+				heroHasFocus -> 0.dp
+				selectedRowPosition == 0 -> (-180).dp
+				else -> (-560).dp
+			},
+			label = "heroOffset"
+		)
+
+		val heroVisible = heroHasFocus || selectedRowPosition == 0
+
+		val rowsOffset by animateDpAsState(
+			targetValue = when {
+				heroHasFocus -> 420.dp
+				selectedRowPosition == 0 -> 260.dp
+				else -> 0.dp
+			},
+			label = "rowsOffset"
+		)
+
+		LaunchedEffect(Unit) {
+			mediaBarState = mediaBarController.load()
+		}
+
+		LaunchedEffect(mediaBarState.items, rowsSupportFragment) {
+			if (
+				!initialHeroFocusDone &&
+				mediaBarState.items.isNotEmpty() &&
+				rowsSupportFragment != null
+			) {
+				delay(250)
+				rowsSupportFragment?.selectedPosition = 0
+				rowsSupportFragment?.verticalGridView?.post {
+					rowsSupportFragment?.verticalGridView?.clearFocus()
+					heroHasFocus = true
+					mediaBarFocusRequester.requestFocus()
+				}
+			}
+		}
 
 		JellyfinTheme {
-			Column {
-				MainToolbar(MainToolbarActiveButton.Home)
+			Box(
+				modifier = Modifier.fillMaxSize()
+			) {
+				AnimatedVisibility(
+					visible = heroVisible,
+					enter = fadeIn(),
+					exit = fadeOut(),
+					modifier = Modifier
+						.fillMaxWidth()
+						.align(Alignment.TopCenter)
+						.offset(y = heroOffset)
+						.zIndex(0f)
+				) {
+					MadflixMediaBarHero(
+						state = mediaBarState,
+						autoAdvance = true,
+						focusRequester = mediaBarFocusRequester,
+						onMoveDownToRows = {
+							rowsSupportFragment?.focusSelectedRowFromHero()
+							heroHasFocus = false
+						},
+						onHeroFocusChanged = {
+							heroHasFocus = true
+							initialHeroFocusDone = true
+						},
+						modifier = Modifier.fillMaxWidth()
+					)
+				}
 
-				// The leanback code has its own awful focus handling that doesn't work properly with Compose view inteop to workaround this
-				// issue we add custom behavior that only allows focus exit when the current selected row is the first one. Additionally when
-				// we do switch the focus, we reset the leanback state so it won't cause weird behavior when focus is regained
-				var rowsSupportFragment by remember { mutableStateOf<HomeRowsFragment?>(null) }
 				AndroidFragment<HomeRowsFragment>(
 					modifier = Modifier
-						.focusGroup()
-						.focusRequester(rowsFocusRequester)
-						.focusProperties {
-							onExit = {
-								val isFirstRowSelected = rowsSupportFragment?.selectedPosition?.let { it <= 0 } ?: false
-								if (requestedFocusDirection != FocusDirection.Up || !isFirstRowSelected) {
-									cancelFocusChange()
-								} else {
-									rowsSupportFragment?.selectedPosition = 0
-									rowsSupportFragment?.verticalGridView?.clearFocus()
-								}
-							}
-						}
-						.fillMaxSize(),
+						.fillMaxSize()
+						.offset(y = rowsOffset)
+						.zIndex(1f),
 					onUpdate = { fragment ->
 						rowsSupportFragment = fragment
+
+						fragment.onMoveUpFromFirstRow = {
+							fragment.verticalGridView?.clearFocus()
+							selectedRowPosition = 0
+							heroHasFocus = true
+							mediaBarFocusRequester.requestFocus()
+						}
+
+						fragment.onSelectedRowPositionChanged = { position ->
+							selectedRowPosition = position.coerceAtLeast(0)
+
+							if (fragment.verticalGridView?.hasFocus() == true) {
+								heroHasFocus = false
+							}
+						}
 					}
 				)
+
+				Box(
+					modifier = Modifier
+						.fillMaxWidth()
+						.align(Alignment.TopCenter)
+						.zIndex(2f)
+				) {
+					MainToolbar(
+						activeButton = MainToolbarActiveButton.Home,
+						downFocusRequester = mediaBarFocusRequester,
+					)
+				}
 			}
 		}
 	}

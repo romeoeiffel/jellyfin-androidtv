@@ -10,6 +10,7 @@ import androidx.leanback.widget.OnItemViewSelectedListener
 import androidx.leanback.widget.Presenter
 import androidx.leanback.widget.Row
 import androidx.leanback.widget.RowPresenter
+import androidx.leanback.widget.BaseGridView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -56,7 +57,7 @@ import org.koin.android.ext.android.inject
 import timber.log.Timber
 import kotlin.time.Duration.Companion.seconds
 
-class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyListener {
+class HomeRowsFragment : RowsSupportFragment(), AudioEventListener {
 	private val api by inject<ApiClient>()
 	private val backgroundService by inject<BackgroundService>()
 	private val playbackManager by inject<PlaybackManager>()
@@ -77,6 +78,8 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private var currentItem: BaseRowItem? = null
 	private var currentRow: ListRow? = null
 	private var justLoaded = true
+	var onSelectedRowPositionChanged: ((Int) -> Unit)? = null
+	var onMoveUpFromFirstRow: (() -> Unit)? = null
 
 	// Special rows
 	private val notificationsRow by lazy { NotificationsHomeFragmentRow(lifecycleScope, notificationsRepository) }
@@ -93,14 +96,10 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				userRepository.currentUser.filterNotNull().first()
 			}
 
-			// Start out with default sections
 			val homesections = userSettingPreferences.activeHomesections
 			var includeLiveTvRows = false
 
-			// Check for live TV support
 			if (homesections.contains(HomeSectionType.LIVE_TV) && currentUser.policy?.enableLiveTvAccess == true) {
-				// This is kind of ugly, but it mirrors how web handles the live TV rows on the home screen
-				// If we can retrieve one live TV recommendation, then we should display the rows
 				val recommendedPrograms by api.liveTvApi.getRecommendedPrograms(
 					enableTotalRecordCount = false,
 					imageTypeLimit = 1,
@@ -110,35 +109,28 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				includeLiveTvRows = recommendedPrograms.items.isNotEmpty()
 			}
 
-			// Make sure the rows are empty
 			val rows = mutableListOf<HomeFragmentRow>()
 
-			// Check for coroutine cancellation
 			if (!isActive) return@launch
 
-			// Actually add the sections
 			for (section in homesections) when (section) {
 				HomeSectionType.LATEST_MEDIA -> rows.add(helper.loadRecentlyAdded(userViewsRepository.views.first()))
 				HomeSectionType.LIBRARY_TILES_SMALL -> rows.add(HomeFragmentViewsRow(small = false))
 				HomeSectionType.LIBRARY_BUTTONS -> rows.add(HomeFragmentViewsRow(small = true))
 				HomeSectionType.RESUME -> rows.add(helper.loadResumeVideo())
 				HomeSectionType.RESUME_AUDIO -> rows.add(helper.loadResumeAudio())
-				HomeSectionType.RESUME_BOOK -> Unit // Books are not (yet) supported
+				HomeSectionType.RESUME_BOOK -> Unit
 				HomeSectionType.ACTIVE_RECORDINGS -> rows.add(helper.loadLatestLiveTvRecordings())
 				HomeSectionType.NEXT_UP -> rows.add(helper.loadNextUp())
 				HomeSectionType.LIVE_TV -> if (includeLiveTvRows) {
 					rows.add(liveTVRow)
 					rows.add(helper.loadOnNow())
 				}
-
 				HomeSectionType.NONE -> Unit
 			}
 
-			// Add sections to layout
 			withContext(Dispatchers.Main) {
 				val cardPresenter = CardPresenter()
-
-				// Add rows in order
 				notificationsRow.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 				nowPlaying.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 				for (row in rows) row.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
@@ -176,19 +168,61 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			}
 		}
 
-		// Subscribe to Audio messages
 		mediaManager.addAudioEventListener(this)
 	}
 
-	override fun onKey(v: View?, keyCode: Int, event: KeyEvent?): Boolean {
-		if (event?.action != KeyEvent.ACTION_UP) return false
-		return keyProcessor.handleKey(keyCode, currentItem, activity)
+	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+		super.onViewCreated(view, savedInstanceState)
+
+		view.post {
+			verticalGridView?.setOnKeyInterceptListener(
+				object : BaseGridView.OnKeyInterceptListener {
+					override fun onInterceptKeyEvent(event: KeyEvent): Boolean {
+						return handleRowsInterceptedKey(event)
+					}
+				}
+			)
+		}
+	}
+
+	fun focusSelectedRowFromHero(rowPosition: Int = selectedPosition.coerceAtLeast(0)) {
+		val targetRow = rowPosition.coerceAtLeast(0)
+
+		view?.post {
+			setSelectedPosition(targetRow, true)
+			verticalGridView?.requestFocus()
+		}
+	}
+
+	private fun selectRowWithinRows(rowPosition: Int) {
+		val targetRow = rowPosition.coerceAtLeast(0)
+
+		if (view == null) return
+
+		setSelectedPosition(targetRow, true)
+	}
+
+	private fun handleRowsInterceptedKey(event: KeyEvent): Boolean {
+		if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP && event.action == KeyEvent.ACTION_DOWN) {
+			return if (selectedPosition > 0) {
+				selectRowWithinRows(selectedPosition - 1)
+				true
+			} else {
+				onMoveUpFromFirstRow?.invoke()
+				true
+			}
+		}
+
+		if (event.action == KeyEvent.ACTION_UP) {
+			return keyProcessor.handleKey(event.keyCode, currentItem, activity)
+		}
+
+		return false
 	}
 
 	override fun onResume() {
 		super.onResume()
 
-		//React to deletion
 		if (currentRow != null && currentItem != null && currentItem?.baseItem != null && currentItem!!.baseItem!!.id == dataRefreshService.lastDeletedItemId) {
 			(currentRow!!.adapter as ItemRowAdapter).remove(currentItem)
 			currentItem = null
@@ -196,14 +230,12 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		}
 
 		if (!justLoaded) {
-			//Re-retrieve anything that needs it but delay slightly so we don't take away gui landing
 			refreshCurrentItem()
 			refreshRows()
 		} else {
 			justLoaded = false
 		}
 
-		// Update audio queue
 		Timber.i("Updating audio queue in HomeFragment (onResume)")
 		nowPlaying.update(requireContext(), adapter as MutableObjectAdapter<Row>)
 	}
@@ -237,7 +269,6 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 	override fun onDestroy() {
 		super.onDestroy()
-
 		mediaManager.removeAudioEventListener(this)
 	}
 
@@ -262,19 +293,23 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			rowViewHolder: RowPresenter.ViewHolder?,
 			row: Row?,
 		) {
-			if (item !is BaseRowItem) {
+			if (item !is BaseRowItem || row !is ListRow) {
 				currentItem = null
-				//fill in default background
+				currentRow = null
 				backgroundService.clearBackgrounds()
-			} else {
-				currentItem = item
-				currentRow = row as ListRow
-
-				val itemRowAdapter = row.adapter as? ItemRowAdapter
-				itemRowAdapter?.loadMoreItemsIfNeeded(itemRowAdapter.indexOf(item))
-
-				backgroundService.setBackground(item.baseItem)
+				return
 			}
+
+			currentItem = item
+			currentRow = row
+
+			val rowPosition = (adapter as MutableObjectAdapter<Row>).indexOf(row)
+			onSelectedRowPositionChanged?.invoke(rowPosition)
+
+			val itemRowAdapter = row.adapter as? ItemRowAdapter
+			itemRowAdapter?.loadMoreItemsIfNeeded(itemRowAdapter.indexOf(item))
+
+			backgroundService.setBackground(item.baseItem)
 		}
 	}
 }
