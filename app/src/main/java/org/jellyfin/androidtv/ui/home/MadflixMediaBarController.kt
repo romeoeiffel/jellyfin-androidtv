@@ -11,6 +11,8 @@ import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemDto
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlin.random.Random
 
 class MadflixMediaBarController(
@@ -25,9 +27,11 @@ class MadflixMediaBarController(
 			return@withContext MadflixMediaBarState(isLoading = false)
 		}
 
+		val priorityIds = loadPriorityIds()
+
 		val pool = coroutineScope {
 			allowedViews
-				.shuffled()
+				.shuffled(Random(System.nanoTime()))
 				.map { view ->
 					async {
 						runCatching {
@@ -47,15 +51,56 @@ class MadflixMediaBarController(
 				.flatten()
 		}
 
-		val selected = pool
+		val dedupedPool = pool.distinctBy { it.id }
+		val poolById = dedupedPool.associateBy { normalizeItemId(it.id?.toString()) }
+
+		val priorityItems = priorityIds
+			.mapNotNull { id -> poolById[normalizeItemId(id)] }
 			.distinctBy { it.id }
-			.shuffled(Random(System.currentTimeMillis()))
+			.take(MAX_PRIORITY_ITEMS)
+
+		val priorityIdSet = priorityItems
+			.map { normalizeItemId(it.id?.toString()) }
+			.toSet()
+
+		val remainingItems = dedupedPool
+			.filterNot { item -> normalizeItemId(item.id?.toString()) in priorityIdSet }
+			.shuffled(Random(System.nanoTime()))
+			.take((HERO_POOL_SIZE - priorityItems.size).coerceAtLeast(0))
+
+		val selected = (priorityItems + remainingItems)
+			.distinctBy { it.id }
 			.take(HERO_POOL_SIZE)
 
 		MadflixMediaBarState(
 			isLoading = false,
 			items = selected,
 		)
+	}
+
+	private suspend fun loadPriorityIds(): List<String> = withContext(Dispatchers.IO) {
+		val baseUrl = api.baseUrl?.trimEnd('/') ?: return@withContext emptyList()
+		val url = "$baseUrl$PRIORITY_LIST_PATH"
+
+		runCatching {
+			val connection = URL(url).openConnection() as HttpURLConnection
+			connection.requestMethod = "GET"
+			connection.connectTimeout = 4000
+			connection.readTimeout = 4000
+
+			val code = connection.responseCode
+			if (code !in 200..299) return@runCatching emptyList<String>()
+
+			val body = connection.inputStream.bufferedReader().use { it.readText() }
+
+			body.lineSequence()
+				.map { line -> line.substringBefore("#").trim() }
+				.map(::normalizeItemId)
+				.filter { it.length == 32 }
+				.distinct()
+				.take(MAX_PRIORITY_ITEMS)
+				.toList()
+		}.getOrElse { emptyList() }
 	}
 
 	private fun isExcludedView(view: BaseItemDto): Boolean {
@@ -93,7 +138,16 @@ class MadflixMediaBarController(
 	}
 
 	private companion object {
-		const val ITEMS_PER_VIEW = 24
+		const val ITEMS_PER_VIEW = 60
 		const val HERO_POOL_SIZE = 50
+		const val MAX_PRIORITY_ITEMS = 4
+		const val PRIORITY_LIST_PATH = "/web/list-androidtv.txt"
+	}
+
+	private fun normalizeItemId(raw: String?): String {
+		return raw
+			.orEmpty()
+			.filter { it.isLetterOrDigit() }
+			.lowercase()
 	}
 }
