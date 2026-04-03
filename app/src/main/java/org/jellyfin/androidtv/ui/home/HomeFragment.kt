@@ -67,33 +67,19 @@ class HomeFragment : Fragment() {
 		var initialHeroFocusDone by remember { mutableStateOf(false) }
 		var heroHasFocus by remember { mutableStateOf(true) }
 
-		val heroOffset by animateDpAsState(
-			targetValue = when {
-				heroHasFocus -> 0.dp
-				selectedRowPosition == 0 -> (-150).dp
-				else -> (-520).dp
-			},
-			animationSpec = tween(
-				durationMillis = 280,
-				easing = FastOutSlowInEasing
-			),
-			label = "heroOffset"
-		)
+		val heroOffset = when {
+			heroHasFocus -> 0.dp
+			selectedRowPosition == 0 -> (-150).dp
+			else -> (-520).dp
+		}
 
 		val heroVisible = heroHasFocus || selectedRowPosition == 0
 
-		val rowsOffset by animateDpAsState(
-			targetValue = when {
-				heroHasFocus -> 440.dp
-				selectedRowPosition == 0 -> 300.dp
-				else -> 0.dp
-			},
-			animationSpec = tween(
-				durationMillis = 280,
-				easing = FastOutSlowInEasing
-			),
-			label = "rowsOffset"
-		)
+		val rowsOffset = when {
+			heroHasFocus -> 440.dp
+			selectedRowPosition == 0 -> 300.dp
+			else -> 0.dp
+		}
 
 		LaunchedEffect(Unit) {
 			mediaBarState = mediaBarController.load()
@@ -120,30 +106,29 @@ class HomeFragment : Fragment() {
 			Box(
 				modifier = Modifier.fillMaxSize()
 			) {
-				AnimatedVisibility(
-					visible = heroVisible,
-					enter = fadeIn(),
-					exit = fadeOut(),
-					modifier = Modifier
-						.fillMaxWidth()
-						.align(Alignment.TopCenter)
-						.offset(y = heroOffset)
-						.zIndex(0f)
-				) {
-					MadflixMediaBarHero(
-						state = mediaBarState,
-						autoAdvance = true,
-						focusRequester = mediaBarFocusRequester,
-						onMoveDownToRows = {
-							rowsSupportFragment?.focusSelectedRowFromHero()
-							heroHasFocus = false
-						},
-						onHeroFocusChanged = {
-							heroHasFocus = true
-							initialHeroFocusDone = true
-						},
-						modifier = Modifier.fillMaxWidth()
-					)
+				if (heroVisible) {
+					Box(
+						modifier = Modifier
+							.fillMaxWidth()
+							.align(Alignment.TopCenter)
+							.offset(y = heroOffset)
+							.zIndex(0f)
+					) {
+						MadflixMediaBarHero(
+							state = mediaBarState,
+							autoAdvance = true,
+							focusRequester = mediaBarFocusRequester,
+							onMoveDownToRows = {
+								rowsSupportFragment?.focusSelectedRowFromHero()
+								heroHasFocus = false
+							},
+							onHeroFocusChanged = {
+								heroHasFocus = true
+								initialHeroFocusDone = true
+							},
+							modifier = Modifier.fillMaxWidth()
+						)
+					}
 				}
 
 				AndroidFragment<HomeRowsFragment>(
