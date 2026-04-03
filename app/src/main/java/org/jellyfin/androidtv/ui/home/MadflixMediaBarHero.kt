@@ -80,11 +80,19 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import java.net.HttpURLConnection
 import timber.log.Timber
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.foundation.layout.width
 
 private const val DEBUG_THEME_VIDEO = false
 private const val DISABLE_THEME_VIDEO_CACHE = false
 
-private const val HERO_VIDEO_START_DELAY_MS = 1800L
+private const val HERO_VIDEO_START_DELAY_MS = 1500L
+private const val HERO_PAGINATION_VISIBLE_DOTS = 8
+private const val HERO_PAGINATION_ACTIVE_WIDTH_DP = 18
+private const val HERO_PAGINATION_DOT_SIZE_DP = 6
 
 private val themeVideoUrlCache = mutableMapOf<String, String?>()
 
@@ -359,7 +367,7 @@ fun MadflixMediaBarHero(
 			val chevronButtonModifier = Modifier
 				.handleMoveDownToRows(onMoveDownToRows)
 				.widthIn(min = 18.dp)
-				.sizeIn(minHeight = 35.dp)
+				.sizeIn(minHeight = 32.dp)
 
 			Row(
 				horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -405,36 +413,22 @@ fun MadflixMediaBarHero(
 				) {
 					Box(
 						modifier = Modifier
-							.size(35.dp)
+							.size(32.dp)
 							.background(iconCircleContainer, CircleShape)
 							.border(1.dp, iconCircleBorder, CircleShape),
 						contentAlignment = Alignment.Center
 					) {
 						Text(
 							text = "ⓘ",
-							fontSize = 24.sp
+							fontSize = 19.sp,
+							//fontWeight = FontWeight.Bold,
+							fontWeight = FontWeight.Medium,       // Le plus gras possible
+							fontFamily = FontFamily.Serif
 						)
 					}
 				}
 
 				if (state.items.size > 1) {
-					Button(
-						modifier = chevronButtonModifier,
-						onClick = {
-							selectedIndex =
-								if (selectedIndex == 0) state.items.lastIndex else selectedIndex - 1
-						},
-						colors = ButtonDefaults.colors(
-							containerColor = Color.Transparent,
-							contentColor = chevronContent,
-						)
-					) {
-						Text(
-							text = "‹",
-							fontSize = 34.sp
-						)
-					}
-
 					Button(
 						modifier = chevronButtonModifier,
 						onClick = {
@@ -448,12 +442,20 @@ fun MadflixMediaBarHero(
 					) {
 						Text(
 							text = "›",
-							fontSize = 34.sp
+							fontSize = 38.sp,
+							fontWeight = FontWeight.Bold
 						)
 					}
 				}
 			}
 		}
+		HeroPaginationDots(
+			totalItems = state.items.size,
+			selectedIndex = selectedIndex,
+			modifier = Modifier
+				.align(Alignment.BottomCenter)
+				.padding(bottom = 100.dp)
+		)
 	}
 }
 
@@ -743,6 +745,59 @@ private fun readAuthenticatedJson(
 }
 
 @Composable
+private fun HeroPaginationDots(
+	totalItems: Int,
+	selectedIndex: Int,
+	modifier: Modifier = Modifier,
+) {
+	if (totalItems <= 1) return
+
+	val visibleDots = minOf(totalItems, HERO_PAGINATION_VISIBLE_DOTS)
+	val activeDotIndex = if (totalItems <= visibleDots) {
+		selectedIndex.coerceIn(0, visibleDots - 1)
+	} else {
+		selectedIndex % visibleDots
+	}
+
+	Box(
+		modifier = modifier
+			.background(
+				color = Color.Black.copy(alpha = 0.42f),
+				shape = CircleShape
+			)
+			.padding(horizontal = 12.dp, vertical = 9.dp)
+	) {
+		Row(
+			horizontalArrangement = Arrangement.spacedBy(8.dp),
+			verticalAlignment = Alignment.CenterVertically,
+		) {
+			repeat(visibleDots) { index ->
+				val isActive = index == activeDotIndex
+
+				Box(
+					modifier = if (isActive) {
+						Modifier
+							.width(HERO_PAGINATION_ACTIVE_WIDTH_DP.dp)
+							.height(HERO_PAGINATION_DOT_SIZE_DP.dp)
+							.background(
+								color = Color.White.copy(alpha = 0.98f),
+								shape = CircleShape
+							)
+					} else {
+						Modifier
+							.size(HERO_PAGINATION_DOT_SIZE_DP.dp)
+							.background(
+								color = Color.White.copy(alpha = 0.42f),
+								shape = CircleShape
+							)
+					}
+				)
+			}
+		}
+	}
+}
+
+@Composable
 private fun HeroThemeVideoPlayer(
 	videoUrl: String,
 	httpDataSourceFactory: HttpDataSource.Factory,
@@ -751,6 +806,9 @@ private fun HeroThemeVideoPlayer(
 	onError: () -> Unit,
 ) {
 	val context = LocalContext.current
+
+	val lifecycleOwner = LocalLifecycleOwner.current
+	val latestVideoUrl by rememberUpdatedState(videoUrl)
 
 	val exoPlayer = remember(videoUrl) {
 		ExoPlayer.Builder(context)
@@ -769,7 +827,7 @@ private fun HeroThemeVideoPlayer(
 			}
 	}
 
-	DisposableEffect(exoPlayer) {
+	DisposableEffect(exoPlayer, lifecycleOwner) {
 		val listener = object : Player.Listener {
 			override fun onRenderedFirstFrame() {
 				onStarted()
@@ -782,14 +840,35 @@ private fun HeroThemeVideoPlayer(
 			}
 
 			override fun onPlayerError(error: PlaybackException) {
-				Timber.tag("MadflixThemeVideo").e(error, "player error videoUrl=%s", videoUrl)
+				Timber.tag("MadflixThemeVideo").e(error, "player error videoUrl=%s", latestVideoUrl)
 				onError()
 			}
 		}
 
+		val observer = LifecycleEventObserver { _, event ->
+			when (event) {
+				Lifecycle.Event.ON_PAUSE,
+				Lifecycle.Event.ON_STOP -> {
+					exoPlayer.playWhenReady = false
+					exoPlayer.pause()
+				}
+
+				Lifecycle.Event.ON_START,
+				Lifecycle.Event.ON_RESUME -> {
+					if (!exoPlayer.isPlaying) {
+						exoPlayer.playWhenReady = true
+					}
+				}
+
+				else -> Unit
+			}
+		}
+
 		exoPlayer.addListener(listener)
+		lifecycleOwner.lifecycle.addObserver(observer)
 
 		onDispose {
+			lifecycleOwner.lifecycle.removeObserver(observer)
 			exoPlayer.removeListener(listener)
 			exoPlayer.release()
 		}
