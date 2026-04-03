@@ -85,6 +85,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.res.painterResource
 
 private const val DEBUG_THEME_VIDEO = false
 private const val DISABLE_THEME_VIDEO_CACHE = false
@@ -334,12 +335,27 @@ fun MadflixMediaBarHero(
 				}
 			}
 
-			if (subtitle.isNotBlank()) {
-				Text(
-					text = subtitle,
-					style = JellyfinTheme.typography.default,
-					color = Color.White.copy(alpha = 0.86f),
+			Row(
+				horizontalArrangement = Arrangement.spacedBy(8.dp),
+				verticalAlignment = Alignment.CenterVertically,
+			) {
+				Image(
+					painter = painterResource(id = R.drawable.app_icon_foreground),
+					contentDescription = "Madflix",
+					contentScale = ContentScale.Fit,
+					modifier = Modifier.size(38.dp)
 				)
+
+				if (subtitle.isNotBlank()) {
+					Text(
+						text = subtitle,
+						style = JellyfinTheme.typography.default.copy(
+							fontSize = 13.sp,
+							fontWeight = FontWeight.Medium,
+						),
+						color = Color.White.copy(alpha = 0.86f),
+					)
+				}
 			}
 
 			if (!item.overview.isNullOrBlank()) {
