@@ -4,12 +4,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.focus.FocusRequester
 import androidx.fragment.app.Fragment
 import androidx.fragment.compose.AndroidFragment
 import androidx.fragment.compose.content
@@ -41,9 +36,9 @@ import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbar
 import org.jellyfin.androidtv.ui.shared.toolbar.MainToolbarActiveButton
+import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.sdk.api.client.ApiClient
 import org.koin.android.ext.android.inject
-import androidx.compose.ui.focus.FocusRequester
 
 class HomeFragment : Fragment() {
 	private val sessionRepository by inject<SessionRepository>()
@@ -51,6 +46,8 @@ class HomeFragment : Fragment() {
 	private val notificationRepository by inject<NotificationsRepository>()
 	private val api by inject<ApiClient>()
 	private val userViewsRepository by inject<UserViewsRepository>()
+
+	private val userRepository by inject<UserRepository>()
 
 	override fun onCreateView(
 		inflater: LayoutInflater,
@@ -60,7 +57,7 @@ class HomeFragment : Fragment() {
 		val mediaBarFocusRequester = remember { FocusRequester() }
 		var rowsSupportFragment by remember { mutableStateOf<HomeRowsFragment?>(null) }
 
-		val mediaBarController = remember { MadflixMediaBarController(api, userViewsRepository) }
+		val mediaBarController = remember { MadflixMediaBarController(api, userViewsRepository, userRepository) }
 		var mediaBarState by remember { mutableStateOf(MadflixMediaBarState()) }
 
 		var selectedRowPosition by remember { mutableIntStateOf(0) }

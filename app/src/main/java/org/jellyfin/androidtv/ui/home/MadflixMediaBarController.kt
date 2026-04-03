@@ -6,6 +6,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.data.repository.ItemRepository
 import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.sdk.api.client.ApiClient
@@ -18,6 +21,7 @@ import kotlin.random.Random
 class MadflixMediaBarController(
 	private val api: ApiClient,
 	private val userViewsRepository: UserViewsRepository,
+	private val userRepository: UserRepository,
 ) {
 	suspend fun load(): MadflixMediaBarState = withContext(Dispatchers.IO) {
 		val views = userViewsRepository.views.first()
@@ -28,6 +32,7 @@ class MadflixMediaBarController(
 		}
 
 		val priorityIds = loadPriorityIds()
+		val explicitPriorityItems = loadExplicitPriorityItems(priorityIds)
 
 		val pool = coroutineScope {
 			allowedViews
@@ -52,10 +57,18 @@ class MadflixMediaBarController(
 		}
 
 		val dedupedPool = pool.distinctBy { it.id }
+		val explicitPriorityIdSet = explicitPriorityItems
+			.map { normalizeItemId(it.id?.toString()) }
+			.toSet()
+
 		val poolById = dedupedPool.associateBy { normalizeItemId(it.id?.toString()) }
 
-		val priorityItems = priorityIds
+		val fallbackPriorityItems = priorityIds
 			.mapNotNull { id -> poolById[normalizeItemId(id)] }
+			.distinctBy { it.id }
+			.filterNot { normalizeItemId(it.id?.toString()) in explicitPriorityIdSet }
+
+		val priorityItems = (explicitPriorityItems + fallbackPriorityItems)
 			.distinctBy { it.id }
 			.take(MAX_PRIORITY_ITEMS)
 
@@ -103,6 +116,64 @@ class MadflixMediaBarController(
 		}.getOrElse { emptyList() }
 	}
 
+	private suspend fun loadExplicitPriorityItems(priorityIds: List<String>): List<BaseItemDto> = coroutineScope {
+		if (priorityIds.isEmpty()) return@coroutineScope emptyList()
+
+		val baseUrl = api.baseUrl?.trimEnd('/') ?: return@coroutineScope emptyList()
+		val accessToken = api.accessToken ?: return@coroutineScope emptyList()
+		val userId = userRepository.currentUser.first()?.id?.toString() ?: return@coroutineScope emptyList()
+
+		val json = Json {
+			ignoreUnknownKeys = true
+		}
+
+		priorityIds
+			.map { priorityId ->
+				async(Dispatchers.IO) {
+					fetchItemById(
+						baseUrl = baseUrl,
+						accessToken = accessToken,
+						userId = userId,
+						itemId = priorityId,
+						json = json,
+					)
+				}
+			}
+			.awaitAll()
+			.filterNotNull()
+			.filter(::isValidHeroItem)
+			.distinctBy { it.id }
+			.take(MAX_PRIORITY_ITEMS)
+	}
+
+	private fun fetchItemById(
+		baseUrl: String,
+		accessToken: String,
+		userId: String,
+		itemId: String,
+		json: Json,
+	): BaseItemDto? {
+		return try {
+			val url = "$baseUrl/Users/$userId/Items/$itemId"
+			val connection = URL(url).openConnection() as HttpURLConnection
+			connection.requestMethod = "GET"
+			connection.connectTimeout = 4000
+			connection.readTimeout = 4000
+			connection.setRequestProperty("Authorization", "MediaBrowser Token=$accessToken")
+			connection.setRequestProperty("Accept", "application/json")
+
+			val code = connection.responseCode
+			if (code !in 200..299) return null
+
+			val body = connection.inputStream.bufferedReader().use { it.readText() }
+			if (body.isBlank()) return null
+
+			json.decodeFromString<BaseItemDto>(body)
+		} catch (_: Throwable) {
+			null
+		}
+	}
+
 	private fun isExcludedView(view: BaseItemDto): Boolean {
 		val typeName = view.collectionType?.name?.uppercase().orEmpty()
 		val name = view.name.orEmpty().lowercase()
@@ -137,17 +208,17 @@ class MadflixMediaBarController(
 		return !item.imageTags.isNullOrEmpty() || !item.backdropImageTags.isNullOrEmpty()
 	}
 
-	private companion object {
-		const val ITEMS_PER_VIEW = 60
-		const val HERO_POOL_SIZE = 50
-		const val MAX_PRIORITY_ITEMS = 4
-		const val PRIORITY_LIST_PATH = "/web/list-androidtv.txt"
-	}
-
 	private fun normalizeItemId(raw: String?): String {
 		return raw
 			.orEmpty()
 			.filter { it.isLetterOrDigit() }
 			.lowercase()
+	}
+
+	private companion object {
+		const val ITEMS_PER_VIEW = 60
+		const val HERO_POOL_SIZE = 50
+		const val MAX_PRIORITY_ITEMS = 4
+		const val PRIORITY_LIST_PATH = "/web/list-androidtv.txt"
 	}
 }
