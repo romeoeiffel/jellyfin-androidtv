@@ -3,6 +3,7 @@ package org.jellyfin.androidtv.ui.home
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import androidx.leanback.app.RowsSupportFragment
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.OnItemViewClickedListener
@@ -206,6 +207,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener {
 	}
 
 	private fun handleRowsInterceptedKey(event: KeyEvent): Boolean {
+
 		if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP && event.action == KeyEvent.ACTION_DOWN) {
 			return if (selectedPosition > 0) {
 				selectRowWithinRows(selectedPosition - 1)

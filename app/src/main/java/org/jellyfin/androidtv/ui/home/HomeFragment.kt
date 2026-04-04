@@ -40,6 +40,7 @@ import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.sdk.api.client.ApiClient
 import org.koin.android.ext.android.inject
 
+
 class HomeFragment : Fragment() {
 	private val sessionRepository by inject<SessionRepository>()
 	private val serverRepository by inject<ServerRepository>()
@@ -48,6 +49,7 @@ class HomeFragment : Fragment() {
 	private val userViewsRepository by inject<UserViewsRepository>()
 
 	private val userRepository by inject<UserRepository>()
+
 
 	override fun onCreateView(
 		inflater: LayoutInflater,
